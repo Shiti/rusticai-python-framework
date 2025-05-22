@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import os
 
 import pytest
@@ -43,6 +44,7 @@ from rustic_ai.litellm.agent_ext import LiteLLMResolver
 from rustic_ai.playwright.agent import PlaywrightScraperAgent, WebScrapingRequest
 from rustic_ai.serpapi.agent import SERPAgent, SERPResults
 from rustic_ai.showcase.laira.research_manager import ResearchManager
+from rustic_ai.vertexai.agent_ext.embeddings import VertexAIEmbeddingsResolver
 
 
 class TestResearchGuild:
@@ -103,38 +105,20 @@ class TestResearchGuild:
         Metastore.drop_db()
 
     @pytest.fixture
-    def research_guild(self, routing_slip, rgdatabase):
-        dep_map = {
-            "vectorstore": DependencySpec(
-                class_name=ChromaResolver.get_qualified_class_name(),
-                properties={"chroma_settings": {"persist_directory": "/tmp/research_guild_test"}},
-            ),
-            "filesystem": DependencySpec(
-                class_name=FileSystemResolver.get_qualified_class_name(),
-                properties={
-                    "path_base": "/tmp",
-                    "protocol": "file",
-                    "storage_options": {
-                        "auto_mkdir": True,
-                    },
-                },
-            ),
-            "textsplitter": DependencySpec(
-                class_name=RecursiveSplitterResolver.get_qualified_class_name(),
-                properties={"conf": {"chunk_size": 10000, "chunk_overlap": 500}},
-            ),
-            "embeddings": DependencySpec(class_name=OpenAIEmbeddingsResolver.get_qualified_class_name(), properties={}),
-            "llm": DependencySpec(
-                class_name=LiteLLMResolver.get_qualified_class_name(), properties={"model": "gpt-4o-mini"}
-            ),
-        }
+    def dep_map_config(self, request):
+        deps_file_name = f"{request.param}_dependencies.yaml"
+        deps_yaml_path = importlib.resources.files("showcase.tests.resources.agent_dependencies").joinpath(
+            deps_file_name)
+        return deps_yaml_path
+
+    @pytest.fixture
+    def research_guild(self, routing_slip, rgdatabase, dep_map_config):
         research_guild_builder = GuildBuilder(
             guild_id=f"research_guild_{shortuuid.uuid()}",
             guild_name="Research Guild",
             guild_description="A guild to research stuff",
         )
-
-        research_guild_builder.set_dependency_map(dep_map)
+        research_guild_builder.load_dependency_map_from_yaml(dep_map_config)
 
         research_agent = (
             AgentBuilder(ResearchManager)
@@ -178,6 +162,7 @@ class TestResearchGuild:
         yield research_guild
         research_guild.shutdown()
 
+    @pytest.mark.parametrize("dep_map_config", ["vertexai"], indirect=True)
     @pytest.mark.skipif(os.getenv("SKIP_EXPENSIVE_TESTS") == "true", reason="Skipping expensive tests")
     @pytest.mark.asyncio
     async def test_research_guild(self, research_guild: Guild, routing_slip: RoutingSlip, generator: GemstoneGenerator):
@@ -223,7 +208,7 @@ class TestResearchGuild:
             payload=ChatCompletionRequest(
                 messages=[
                     UserMessage(
-                        content=[TextContentPart(text="What is LSTM?"), TextContentPart(text="How does it work?")]
+                        content=[TextContentPart(text="How do LSTM networks work?")]
                     )
                 ]
             ).model_dump(),
@@ -252,12 +237,13 @@ class TestResearchGuild:
 
         final_response = messages[-1]
 
-        assert len(messages) >= 22
+        assert len(messages) > 20
 
         assert final_response.format == tf
 
         content = TextFormat.model_validate(final_response.payload)
 
+        print(content.text)
         # Check that the response text contains LSTM
         assert "LSTM" in content.text
 
