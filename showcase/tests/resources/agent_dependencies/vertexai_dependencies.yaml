@@ -24,4 +24,4 @@ llm:
   }
 textsplitter:
   class_name: rustic_ai.langchain.agent_ext.text_splitter.recursive_splitter.RecursiveSplitterResolver
-  properties: { "conf": { "chunk_size": 500, "chunk_overlap": 100 } }
+  properties: { "conf": { "chunk_size": 450, "chunk_overlap": 50 , "hf_tokenizer_model": "google-bert/bert-base-uncased"} }

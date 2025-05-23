@@ -24,15 +24,17 @@ class VertexAIEmbeddings(VertexAIBase, Embeddings):
         self.model = TextEmbeddingModel.from_pretrained(model)
 
     def embed(self, text: List[str]) -> List[List[float]]:
-        text_embedding_input = [TextEmbeddingInput(
-            task_type=self.conf.task_type, text=t
-        ) for t in text]
-        try:
+        print(f"\ntokens according to model are {self.model.count_tokens(text)}\n")
+        result: List[List[float]] = []
+        for t in text:
+            text_embedding_input = [TextEmbeddingInput(
+                task_type=self.conf.task_type, text=t
+            )]
             embeddings = self.model.get_embeddings(text_embedding_input, auto_truncate=self.conf.auto_truncate,
                                                    output_dimensionality=self.conf.output_dimensionality)
-            return [embedding.values for embedding in embeddings]
-        except Exception as e:
-            raise RuntimeError(f"Error while embedding text: {e}")
+            for embedding in embeddings:
+                result.append(embedding.values)
+        return result
 
 
 class VertexAIEmbeddingsResolver(DependencyResolver[Embeddings]):

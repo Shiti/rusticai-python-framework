@@ -1,4 +1,4 @@
-from typing import Callable, List, Literal, Union
+from typing import Callable, List, Literal, Union, Optional
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
@@ -21,6 +21,7 @@ class RecursiveSplitterConf(BaseModel):
     separators: List[str] = ["\n\n", "\n", " ", ""]
     keep_separator: Union[bool, Literal["start", "end"]] = True
     is_separator_regex: bool = False
+    hf_tokenizer_model: Optional[str] = None
 
 
 class RecursiveSplitter(TextSplitter):
@@ -29,15 +30,27 @@ class RecursiveSplitter(TextSplitter):
     """
 
     def __init__(self, conf: RecursiveSplitterConf):
-        self.splitter = RecursiveCharacterTextSplitter(
-            separators=conf.separators,
-            is_separator_regex=conf.is_separator_regex,
-            keep_separator=conf.keep_separator,
-            **conf.model_dump(exclude={"separators", "is_separator_regex", "keep_separator"}),
-        )
+        if conf.hf_tokenizer_model:
+            from transformers import AutoTokenizer
+            tokenizer = AutoTokenizer.from_pretrained(conf.hf_tokenizer_model)
+            self.tokenizer = tokenizer
+            self.splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+                tokenizer,
+                **conf.model_dump(exclude={"hf_tokenizer_model", "length_function"})
+            )
+        else:
+            self.splitter = RecursiveCharacterTextSplitter(
+                separators=conf.separators,
+                is_separator_regex=conf.is_separator_regex,
+                keep_separator=conf.keep_separator,
+                **conf.model_dump(exclude={"separators", "is_separator_regex", "keep_separator"}),
+            )
 
     def split(self, text: str) -> list[str]:
-        return self.splitter.split_text(text)
+        result = self.splitter.split_text(text)
+        for chunk in result:
+            print(len(self.tokenizer.tokenize(chunk)))
+        return result
 
 
 class RecursiveSplitterResolver(DependencyResolver[TextSplitter]):
